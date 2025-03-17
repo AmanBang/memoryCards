@@ -77,6 +77,18 @@ export default function Card3D({ card, onClick, position, difficulty }: Card3DPr
     setTargetRotation(card.isFlipped ? Math.PI : 0);
   }, [card.isFlipped]);
   
+  // Get card scale based on difficulty
+  const getCardScale = (): [number, number, number] => {
+    switch (difficulty) {
+      case 'tough':
+        return [0.85, 0.85, 1];
+      case 'genius':
+        return [0.8, 0.8, 1];
+      default:
+        return [1, 1, 1];
+    }
+  };
+  
   // Handle animation and interaction
   useFrame((_, delta) => {
     if (!meshRef.current) return;
@@ -88,19 +100,21 @@ export default function Card3D({ card, onClick, position, difficulty }: Card3DPr
       delta * 5
     );
     
-    // Hover effect
-    if (hovered && !card.isMatched && !card.isFlipped) {
-      meshRef.current.position.y = THREE.MathUtils.lerp(
-        meshRef.current.position.y,
-        position[1] + 0.1,
-        delta * 5
-      );
-    } else {
-      meshRef.current.position.y = THREE.MathUtils.lerp(
-        meshRef.current.position.y,
-        position[1],
-        delta * 5
-      );
+    // Hover effect - only apply on non-mobile devices
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+      if (hovered && !card.isMatched && !card.isFlipped) {
+        meshRef.current.position.y = THREE.MathUtils.lerp(
+          meshRef.current.position.y,
+          position[1] + 0.1,
+          delta * 5
+        );
+      } else {
+        meshRef.current.position.y = THREE.MathUtils.lerp(
+          meshRef.current.position.y,
+          position[1],
+          delta * 5
+        );
+      }
     }
   });
   
@@ -160,9 +174,16 @@ export default function Card3D({ card, onClick, position, difficulty }: Card3DPr
     <mesh
       ref={meshRef}
       position={position}
-      onClick={() => !card.isMatched && !card.isFlipped && onClick()}
+      onClick={(e) => {
+        // Prevent event propagation to avoid triggering OrbitControls
+        e.stopPropagation();
+        if (!card.isMatched && !card.isFlipped) {
+          onClick();
+        }
+      }}
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
+      scale={getCardScale()}
     >
       <boxGeometry args={[0.9, 1.2, 0.05]} />
       

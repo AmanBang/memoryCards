@@ -408,7 +408,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
                 playerScores.sort((a, b) => b.score - a.score);
                 
                 let winner = null;
-                if (playerScores[0].score > playerScores[1]?.score || !playerScores[1]) {
+                if (playerScores.length > 1) {
+                  if (playerScores[0].score > playerScores[1].score) {
+                    winner = playerScores[0].id;
+                  }
+                  // If scores are equal, winner remains null (tie)
+                } else if (playerScores.length === 1) {
                   winner = playerScores[0].id;
                 }
                 

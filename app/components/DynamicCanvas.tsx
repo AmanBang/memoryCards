@@ -20,6 +20,19 @@ export default function DynamicCanvas({ children, className = "" }: DynamicCanva
 
   useEffect(() => {
     setMounted(true);
+    
+    // Add meta viewport tag to prevent scaling issues on mobile
+    const viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (viewportMeta) {
+      viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+    }
+    
+    return () => {
+      // Restore default viewport
+      if (viewportMeta) {
+        viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0');
+      }
+    };
   }, []);
 
   if (!mounted) {
@@ -33,7 +46,17 @@ export default function DynamicCanvas({ children, className = "" }: DynamicCanva
   }
 
   return (
-    <Canvas className={className} shadows>
+    <Canvas 
+      className={className} 
+      shadows 
+      dpr={[1, 2]} // Limit pixel ratio for better performance
+      gl={{ 
+        antialias: true,
+        alpha: true,
+        preserveDrawingBuffer: true
+      }}
+      performance={{ min: 0.5 }} // Improve performance by allowing frame rate to drop
+    >
       <Suspense fallback={null}>
         {children}
       </Suspense>

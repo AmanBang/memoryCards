@@ -1,11 +1,18 @@
 {
   "presets": [
-    ["next/babel"]
+    ["next/babel", {
+      "preset-env": {
+        "targets": {
+          "browsers": [">0.25%", "not ie 11", "not op_mini all"]
+        }
+      }
+    }]
   ],
   "plugins": [
     "@babel/plugin-transform-private-methods",
     "@babel/plugin-transform-class-properties",
-    "@babel/plugin-transform-private-property-in-object"
+    "@babel/plugin-transform-private-property-in-object",
+    "@babel/plugin-transform-object-rest-spread"
   ],
   "env": {
     "development": {
