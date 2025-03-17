@@ -1,12 +1,140 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useThree } from '@react-three/fiber';
+import { useState, useEffect, useRef } from 'react';
+import { useThree, useFrame } from '@react-three/fiber';
 import Card3D from './Card3D';
 import DynamicCanvas from './DynamicCanvas';
 import { useGame } from '../context/GameContext';
 import { calculateGrid } from '../utils/helpers';
 import * as THREE from 'three';
+
+// Simple Pan Controls component
+function PanControls({ maxDistance = 30, minDistance = 2 }) {
+  const { camera, gl } = useThree();
+  const domElement = gl.domElement;
+  const [isDragging, setIsDragging] = useState(false);
+  const lastPosition = useRef({ x: 0, y: 0 });
+  const targetPosition = useRef(new THREE.Vector3(0, 0, 0));
+  
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      setIsDragging(true);
+      lastPosition.current = { x: e.clientX, y: e.clientY };
+    };
+    
+    const onPointerUp = () => {
+      setIsDragging(false);
+    };
+    
+    const onPointerMove = (e: PointerEvent) => {
+      if (isDragging) {
+        const deltaX = (e.clientX - lastPosition.current.x) * 0.01;
+        const deltaY = (e.clientY - lastPosition.current.y) * 0.01;
+        
+        // Move camera target (not the camera itself)
+        targetPosition.current.x -= deltaX;
+        targetPosition.current.y += deltaY;
+        
+        lastPosition.current = { x: e.clientX, y: e.clientY };
+      }
+    };
+    
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY * 0.005;
+      
+      // Adjust camera distance
+      if (camera instanceof THREE.PerspectiveCamera) {
+        let newZ = camera.position.z + delta;
+        newZ = Math.max(minDistance, Math.min(maxDistance, newZ));
+        camera.position.z = newZ;
+      }
+    };
+    
+    // Touch controls for pinch zoom
+    let initialTouchDistance = 0;
+    
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        initialTouchDistance = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      } else if (e.touches.length === 1) {
+        lastPosition.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        setIsDragging(true);
+      }
+    };
+    
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      
+      // Handle pinch to zoom with two fingers
+      if (e.touches.length === 2) {
+        const currentDistance = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        
+        const delta = (initialTouchDistance - currentDistance) * 0.01;
+        initialTouchDistance = currentDistance;
+        
+        if (camera instanceof THREE.PerspectiveCamera) {
+          let newZ = camera.position.z + delta;
+          newZ = Math.max(minDistance, Math.min(maxDistance, newZ));
+          camera.position.z = newZ;
+        }
+      } 
+      // Handle drag with one finger
+      else if (e.touches.length === 1 && isDragging) {
+        const deltaX = (e.touches[0].clientX - lastPosition.current.x) * 0.01;
+        const deltaY = (e.touches[0].clientY - lastPosition.current.y) * 0.01;
+        
+        targetPosition.current.x -= deltaX;
+        targetPosition.current.y += deltaY;
+        
+        lastPosition.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+    };
+    
+    const onTouchEnd = () => {
+      setIsDragging(false);
+    };
+    
+    // Add all event listeners
+    domElement.addEventListener('pointerdown', onPointerDown);
+    domElement.addEventListener('pointerup', onPointerUp);
+    domElement.addEventListener('pointermove', onPointerMove);
+    domElement.addEventListener('wheel', onWheel, { passive: false });
+    
+    // Touch events
+    domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+    domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+    domElement.addEventListener('touchend', onTouchEnd);
+    
+    return () => {
+      // Remove all event listeners
+      domElement.removeEventListener('pointerdown', onPointerDown);
+      domElement.removeEventListener('pointerup', onPointerUp);
+      domElement.removeEventListener('pointermove', onPointerMove);
+      domElement.removeEventListener('wheel', onWheel);
+      
+      domElement.removeEventListener('touchstart', onTouchStart);
+      domElement.removeEventListener('touchmove', onTouchMove);
+      domElement.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [domElement, isDragging, camera, maxDistance, minDistance]);
+  
+  useFrame(() => {
+    if (camera instanceof THREE.PerspectiveCamera) {
+      // Smoothly transition the camera to the target position
+      camera.position.x += (targetPosition.current.x - camera.position.x) * 0.1;
+      camera.position.y += (targetPosition.current.y - camera.position.y) * 0.1;
+    }
+  });
+  
+  return null;
+}
 
 // Custom Camera component
 function Camera(props: { position: [number, number, number], fov: number }) {
@@ -19,72 +147,6 @@ function Camera(props: { position: [number, number, number], fov: number }) {
       camera.updateProjectionMatrix();
     }
   }, [camera, props.position, props.fov]);
-  
-  return null;
-}
-
-// Custom Controls component for panning and zooming
-function CustomControls() {
-  const { camera, gl } = useThree();
-  const [isDragging, setIsDragging] = useState(false);
-  const [lastPosition, setLastPosition] = useState({ x: 0, y: 0 });
-  
-  useEffect(() => {
-    const canvas = gl.domElement;
-    
-    // Pan handling
-    const onPointerDown = (e: PointerEvent) => {
-      setIsDragging(true);
-      setLastPosition({ x: e.clientX, y: e.clientY });
-    };
-    
-    const onPointerMove = (e: PointerEvent) => {
-      if (!isDragging) return;
-      
-      const deltaX = (e.clientX - lastPosition.x) * 0.01;
-      const deltaY = (e.clientY - lastPosition.y) * 0.01;
-      
-      camera.position.x -= deltaX;
-      camera.position.y += deltaY;
-      
-      setLastPosition({ x: e.clientX, y: e.clientY });
-    };
-    
-    const onPointerUp = () => {
-      setIsDragging(false);
-    };
-    
-    // Zoom handling
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      
-      // Adjust zoom speed
-      const zoomSpeed = 0.1;
-      const delta = e.deltaY > 0 ? 1 : -1;
-      
-      // Limit zoom
-      const newZ = camera.position.z + delta * zoomSpeed;
-      if (newZ > 2 && newZ < 30) {
-        camera.position.z = newZ;
-      }
-    };
-    
-    // Add listeners
-    canvas.addEventListener('pointerdown', onPointerDown);
-    canvas.addEventListener('pointermove', onPointerMove);
-    canvas.addEventListener('pointerup', onPointerUp);
-    canvas.addEventListener('pointerleave', onPointerUp);
-    canvas.addEventListener('wheel', onWheel);
-    
-    // Cleanup
-    return () => {
-      canvas.removeEventListener('pointerdown', onPointerDown);
-      canvas.removeEventListener('pointermove', onPointerMove);
-      canvas.removeEventListener('pointerup', onPointerUp);
-      canvas.removeEventListener('pointerleave', onPointerUp);
-      canvas.removeEventListener('wheel', onWheel);
-    };
-  }, [camera, gl, isDragging, lastPosition]);
   
   return null;
 }
@@ -176,11 +238,6 @@ export default function GameBoard() {
     if (cardCount > 64 && cardCount <= 100) distanceScale = 1.5; // Tough
     if (cardCount > 100) distanceScale = 1.8; // Genius
     
-    // Add additional distance for mobile to show more of the board initially
-    if (isMobile) {
-      distanceScale *= 1.3;
-    }
-    
     // Add additional distance for large grids
     const baseDistance = maxDimension * 0.9;
     const distance = baseDistance * distanceScale;
@@ -223,8 +280,8 @@ export default function GameBoard() {
       <directionalLight position={[10, 10, 10]} intensity={1} castShadow />
       <Camera position={getCameraPosition()} fov={getCameraFOV()} />
       
-      {/* Use custom controls instead of OrbitControls */}
-      <CustomControls />
+      {/* Add OrbitControls to allow panning and zooming */}
+      <PanControls />
       
       {gameState.cards.map((card, index) => (
         <Card3D
@@ -248,7 +305,7 @@ export default function GameBoard() {
       
       {isMobile && (
         <div className="absolute top-2 left-2 z-10 bg-blue-600 text-white px-3 py-1 rounded-full text-xs">
-          Drag to move, scroll to zoom
+          Pinch to zoom, drag to move
         </div>
       )}
       

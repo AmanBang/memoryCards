@@ -45,8 +45,9 @@ function createTextCanvas(text: string, fontSize: number, color: string) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   
   // Draw text
-  const fontSizePx = Math.floor(fontSize * 100);
-  ctx.font = `bold ${fontSizePx}px Arial`;
+  const fontSizePx = Math.floor(fontSize * 120); // Increased font size for emojis
+  // Use a font that has good emoji support
+  ctx.font = `${fontSizePx}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", Arial, sans-serif`;
   ctx.fillStyle = color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -150,9 +151,23 @@ export default function Card3D({ card, onClick, position, difficulty }: Card3DPr
       return '';
     }
     
-    // For other difficulties, use symbols or numbers
-    const symbols = ['♠', '♥', '♦', '♣', '★', '✿', '✦', '♛', '♞', '☼'];
-    return symbols[card.value % symbols.length];
+    // For other difficulties, use emojis grouped by category
+    const emojis = [
+      // Animals
+      '🐶', '🐱', '🐭', '🦊', '🐻', '🐼', '🦁', '🐯', '🦄', '🐝', 
+      '🦋', '🐢', '🐙', '🦈', '🦜', '🦉', '🦧', '🐘', '🦒', '🦏',
+      // Fruits & Food
+      '🍎', '🍌', '🍉', '🍇', '🍓', '🍍', '🥑', '🍔', '🍕', '🍦',
+      '🌮', '🍣', '🥨', '🍩', '🥐', '🧁', '🍭', '🍫', '🥥', '🍪',
+      // Vehicles & Travel
+      '🚗', '🚕', '🚙', '🚌', '🚑', '🏎️', '🚂', '🚀', '✈️', '🛸',
+      '🚁', '⛵', '🚤', '🚲', '🛴', '🏍️', '🚄', '🚞', '🚠', '🚇',
+      // Objects & Activities
+      '⚽', '🏀', '🏈', '⚾', '🎾', '🎮', '🎲', '🧩', '🎸', '🎺',
+      '🔮', '💎', '🔑', '🧸', '🎁', '💼', '📱', '⌚', '🔋', '💡'
+    ];
+    
+    return emojis[card.value % emojis.length];
   };
   
   // Handle card matched state
@@ -214,7 +229,7 @@ export default function Card3D({ card, onClick, position, difficulty }: Card3DPr
         <SimpleText
           position={[0, 0, 0.03]}
           rotation={[0, Math.PI, 0]}
-          fontSize={0.4}
+          fontSize={1}
           color="#ffffff"
         >
           {getCardSymbol()}
