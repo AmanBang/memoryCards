@@ -31,6 +31,42 @@ function SimpleText({ children, position, rotation, fontSize, color }: any) {
   );
 }
 
+// Create linen texture using canvas
+function createLinenTexture() {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  
+  canvas.width = 256;
+  canvas.height = 256;
+  
+  // Background color
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw subtle linen pattern
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+  ctx.lineWidth = 1;
+  
+  // Horizontal lines
+  for (let i = 0; i < canvas.height; i += 4) {
+    ctx.beginPath();
+    ctx.moveTo(0, i);
+    ctx.lineTo(canvas.width, i);
+    ctx.stroke();
+  }
+  
+  // Vertical lines
+  for (let i = 0; i < canvas.width; i += 4) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, canvas.height);
+    ctx.stroke();
+  }
+  
+  return canvas;
+}
+
 // Helper function to create text on canvas
 function createTextCanvas(text: string, fontSize: number, color: string) {
   const canvas = document.createElement('canvas');
@@ -68,8 +104,11 @@ export default function Card3D({ card, onClick, position, difficulty }: Card3DPr
   const [hovered, setHovered] = useState(false);
   const [targetRotation, setTargetRotation] = useState(0);
   const [isMounted, setIsMounted] = useState(false);
+  const [linenTexture, setLinenTexture] = useState<HTMLCanvasElement | null>(null);
   
+  // Create linen texture on mount
   useEffect(() => {
+    setLinenTexture(createLinenTexture());
     setIsMounted(true);
   }, []);
   
@@ -116,6 +155,13 @@ export default function Card3D({ card, onClick, position, difficulty }: Card3DPr
           delta * 5
         );
       }
+    }
+    
+    // Pulsing/glowing effect for matched cards
+    if (card.isMatched && meshRef.current) {
+      const pulse = Math.sin(Date.now() * 0.003) * 0.1 + 0.9;
+      meshRef.current.scale.x = getCardScale()[0] * pulse;
+      meshRef.current.scale.y = getCardScale()[1] * pulse;
     }
   });
   
@@ -173,68 +219,119 @@ export default function Card3D({ card, onClick, position, difficulty }: Card3DPr
   // Handle card matched state
   useEffect(() => {
     if (card.isMatched && meshRef.current) {
-      // Fade out matched cards
-      const fadeOut = () => {
+      // Add a slight delay before starting the matched effect
+      setTimeout(() => {
         if (!meshRef.current) return;
-        
-        meshRef.current.scale.set(0.9, 0.9, 0.9);
-        meshRef.current.position.z = -0.5;
-      };
-      
-      setTimeout(fadeOut, 500);
+        meshRef.current.position.z = -0.1;
+      }, 300);
     }
   }, [card.isMatched]);
   
+  // Get glow intensity for matched cards
+  const getGlowIntensity = () => {
+    if (!card.isMatched) return 0;
+    
+    // Create pulsing glow effect
+    return Math.sin(Date.now() * 0.003) * 0.3 + 0.7;
+  };
+  
   return (
-    <mesh
-      ref={meshRef}
-      position={position}
-      onClick={(e) => {
-        // Prevent event propagation to avoid triggering OrbitControls
-        e.stopPropagation();
-        if (!card.isMatched && !card.isFlipped) {
-          onClick();
-        }
-      }}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-      scale={getCardScale()}
-    >
-      <boxGeometry args={[0.9, 1.2, 0.05]} />
-      
-      {/* Card back */}
-      <meshStandardMaterial 
-        attach="material-0" 
-        color={new THREE.Color(0.2, 0.2, 0.2)} 
-        roughness={0.5}
-      />
-      
-      {/* Card front */}
-      <meshStandardMaterial 
-        attach="material-1" 
-        color={getCardColor()} 
-        roughness={0.2}
-        transparent={card.isMatched}
-        opacity={card.isMatched ? 0.5 : 1}
-      />
-      
-      {/* Card edges */}
-      <meshStandardMaterial attach="material-2" color="#ffffff" />
-      <meshStandardMaterial attach="material-3" color="#ffffff" />
-      <meshStandardMaterial attach="material-4" color="#ffffff" />
-      <meshStandardMaterial attach="material-5" color="#ffffff" />
-      
-      {/* Card symbol/value (only visible when card is flipped) */}
-      {isMounted && card.isFlipped && (
-        <SimpleText
-          position={[0, 0, 0.03]}
-          rotation={[0, Math.PI, 0]}
-          fontSize={1}
-          color="#ffffff"
+    <group>
+      {/* Drop shadow - only rendered when the card is flipped */}
+      {card.isFlipped && (
+        <mesh
+          position={[position[0], position[1] - 0.05, position[2] - 0.1]}
+          rotation={[Math.PI / 2, 0, 0]}
         >
-          {getCardSymbol()}
-        </SimpleText>
+          <planeGeometry args={[0.9, 1.2]} />
+          <meshBasicMaterial
+            color="#000000"
+            transparent
+            opacity={0.2}
+            depthWrite={false}
+          />
+        </mesh>
       )}
-    </mesh>
+      
+      {/* Glow effect for matched cards */}
+      {card.isMatched && (
+        <mesh
+          position={position}
+          scale={[1.1, 1.4, 1]}
+        >
+          <boxGeometry args={[0.9, 1.2, 0.05]} />
+          <meshBasicMaterial
+            color="#ffffff"
+            transparent
+            opacity={getGlowIntensity() * 0.3}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+      
+      {/* Main card mesh */}
+      <mesh
+        ref={meshRef}
+        position={position}
+        onClick={(e) => {
+          // Prevent event propagation to avoid triggering OrbitControls
+          e.stopPropagation();
+          if (!card.isMatched && !card.isFlipped) {
+            onClick();
+          }
+        }}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+        scale={getCardScale()}
+      >
+        {/* Slightly rounded card geometry */}
+        <boxGeometry args={[0.9, 1.2, 0.05]} />
+        
+        {/* Card back with linen texture */}
+        <meshStandardMaterial 
+          attach="material-0" 
+          color={new THREE.Color(0.15, 0.15, 0.15)} 
+          roughness={0.7}
+          metalness={0.1}
+        >
+          {linenTexture && (
+            <canvasTexture 
+              attach="map" 
+              image={linenTexture}
+              wrapS={THREE.RepeatWrapping}
+              wrapT={THREE.RepeatWrapping}
+            />
+          )}
+        </meshStandardMaterial>
+        
+        {/* Card front */}
+        <meshStandardMaterial 
+          attach="material-1" 
+          color={getCardColor()} 
+          roughness={0.2}
+          metalness={0.2}
+          transparent={card.isMatched}
+          opacity={card.isMatched ? 0.8 : 1}
+        />
+        
+        {/* Card edges */}
+        <meshStandardMaterial attach="material-2" color="#222222" />
+        <meshStandardMaterial attach="material-3" color="#222222" />
+        <meshStandardMaterial attach="material-4" color="#222222" />
+        <meshStandardMaterial attach="material-5" color="#222222" />
+        
+        {/* Card symbol/value (only visible when card is flipped) */}
+        {isMounted && card.isFlipped && (
+          <SimpleText
+            position={[0, 0, 0.03]}
+            rotation={[0, Math.PI, 0]}
+            fontSize={1}
+            color="#ffffff"
+          >
+            {getCardSymbol()}
+          </SimpleText>
+        )}
+      </mesh>
+    </group>
   );
 }

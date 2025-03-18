@@ -194,7 +194,7 @@ export default function GameBoard() {
   
   if (!gameState) {
     return (
-      <div className="w-full h-[500px] flex items-center justify-center bg-[#463A38] rounded-lg">
+      <div className="w-full h-[500px] flex items-center justify-center bg-[#add8e6] rounded-lg">
         <p className="text-xl text-white">Loading game...</p>
       </div>
     );
@@ -276,8 +276,14 @@ export default function GameBoard() {
   
   const renderGameContent = () => (
     <>
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[10, 10, 10]} intensity={1} castShadow />
+      {/* Light blue background plane */}
+      <mesh position={[0, 0, -5]} rotation={[0, 0, 0]}>
+        <planeGeometry args={[100, 100]} />
+        <meshBasicMaterial color="#add8e6" />
+      </mesh>
+      
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[10, 10, 10]} intensity={1.2} castShadow />
       <Camera position={getCameraPosition()} fov={getCameraFOV()} />
       
       {/* Add OrbitControls to allow panning and zooming */}
@@ -296,7 +302,7 @@ export default function GameBoard() {
   );
   
   return (
-    <div className={`w-full ${getContainerHeight()} bg-[#463A38] rounded-lg overflow-hidden relative`}>
+    <div className={`w-full ${getContainerHeight()} bg-[#add8e6] rounded-lg overflow-hidden relative`}>
       {isOffline && (
         <div className="absolute top-2 right-2 z-10 bg-red-600 text-white px-3 py-1 rounded-full text-sm">
           Offline
