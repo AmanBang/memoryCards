@@ -1,16 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Card2D from './Card2D';
 import { useGame } from '../context/GameContext';
 import { calculateGrid } from '../utils/helpers';
 import VoiceChat from './VoiceChat';
+
+import { createPortal } from 'react-dom';
 
 export default function GameBoard() {
   const { gameState, flipCard, isOffline } = useGame();
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [gridStyle, setGridStyle] = useState({});
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Force re-render every 30 seconds to keep the timer updated
   useEffect(() => {
@@ -20,7 +28,7 @@ export default function GameBoard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Listen for fullscreen change events (e.g. user pressing Esc)
+  // Listen for fullscreen change events
   useEffect(() => {
     const handleFullScreenChange = () => {
       setIsFullScreen(!!document.fullscreenElement);
@@ -35,45 +43,94 @@ export default function GameBoard() {
     if (!gameState) return;
 
     const calculateLayout = () => {
-      const { rows, cols } = calculateGrid(gameState.cards.length);
-      const gap = 16; // 1rem = 16px
-      const padding = 32; // 2rem = 32px
+      // Get base grid dimensions
+      let { rows, cols } = calculateGrid(gameState.cards.length);
 
-      // Available space
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
+      const gap = 8; // Smaller gap for mobile
+      const padding = 16; // Smaller padding
 
-      const availableWidth = isFullScreen ? vw - padding : Math.min(vw - padding, 1152); // max-w-6xl is 1152px
-      const availableHeight = isFullScreen ? vh - padding : Math.max(500, vh * 0.7); // Min 500px or 70% of screen height
+      // Check if mobile
+      const isMobile = window.innerWidth < 640;
 
-      // Card aspect ratio 3:4
-      const cardAspectRatio = 3 / 4;
+      // Force 4 columns on mobile for 16 cards (Easy mode) to match reference image
+      if (isMobile && gameState.cards.length === 16) {
+        cols = 4;
+        rows = 4;
+      }
+
+      let availableWidth, availableHeight;
+
+      if (isFullScreen) {
+        availableWidth = window.innerWidth - padding * 2;
+        availableHeight = window.innerHeight - padding * 2;
+      } else {
+        // In normal mode, try to use container width, fallback to window
+        availableWidth = containerRef.current?.clientWidth
+          ? containerRef.current.clientWidth - padding * 2
+          : window.innerWidth - padding * 2;
+
+        // Constrain height in normal mode to avoid scrolling the whole page if possible
+        const headerHeight = 140;
+        availableHeight = Math.min(window.innerHeight - headerHeight - padding * 2, 600);
+      }
+
+      // Safety check
+      availableWidth = Math.max(280, availableWidth);
+      availableHeight = Math.max(300, availableHeight);
+
+      // Card aspect ratio 3:4 (standard playing card ratio)
+      // The reference image shows slightly taller cards, maybe 2:3 or 3:4.5
+      const cardAspectRatio = 3 / 4.2;
 
       // Calculate max card width based on available width
-      // width = (availableWidth - (cols - 1) * gap) / cols
       const maxCardWidthFromWidth = (availableWidth - (cols - 1) * gap) / cols;
 
       // Calculate max card width based on available height
-      // height = width / ratio
-      // height = (availableHeight - (rows - 1) * gap) / rows
-      // width = height * ratio
       const maxCardHeightFromHeight = (availableHeight - (rows - 1) * gap) / rows;
       const maxCardWidthFromHeight = maxCardHeightFromHeight * cardAspectRatio;
 
-      // Choose the smaller of the two to ensure it fits both dimensions
-      const cardWidth = Math.min(maxCardWidthFromWidth, maxCardWidthFromHeight);
+      // Choose the smaller to fit both, but set a reasonable minimum
+      let cardWidth = Math.floor(Math.min(maxCardWidthFromWidth, maxCardWidthFromHeight));
+
+      // On mobile, prioritize width fit over height fit to ensure 4 columns are visible
+      // The reference image shows cards filling the width
+      if (isMobile) {
+        // Use the width-based calculation primarily, but clamp if it makes cards too tall
+        cardWidth = Math.floor(maxCardWidthFromWidth);
+
+        // If this width makes the total height exceed available height significantly, scale down
+        // But for 16 cards, scrolling is acceptable if needed, though fitting is better
+        const totalHeight = rows * (cardWidth / cardAspectRatio) + (rows - 1) * gap;
+        if (totalHeight > availableHeight && isFullScreen) {
+          // If full screen, try to fit in height too
+          cardWidth = Math.floor(Math.min(cardWidth, maxCardWidthFromHeight));
+        }
+      }
 
       setGridStyle({
         gridTemplateColumns: `repeat(${cols}, ${cardWidth}px)`,
         gap: `${gap}px`,
         maxWidth: '100%',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        alignContent: 'center',
+        paddingBottom: isMobile ? '80px' : '0' // Add bottom padding on mobile for controls
       });
     };
 
     calculateLayout();
+
+    // Observer for container resize
+    const observer = new ResizeObserver(calculateLayout);
+    if (containerRef.current && !isFullScreen) {
+      observer.observe(containerRef.current);
+    }
+
     window.addEventListener('resize', calculateLayout);
-    return () => window.removeEventListener('resize', calculateLayout);
+
+    return () => {
+      window.removeEventListener('resize', calculateLayout);
+      observer.disconnect();
+    };
   }, [gameState, isFullScreen]);
 
   const handleCardClick = (cardId: number) => {
@@ -85,13 +142,19 @@ export default function GameBoard() {
   };
 
   const toggleFullScreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch((e) => {
-        console.error(`Error attempting to enable full-screen mode: ${e.message} (${e.name})`);
-      });
-      setIsFullScreen(true);
+    if (!isFullScreen) {
+      // Try native fullscreen first
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(err => {
+          console.log("Native fullscreen failed, falling back to CSS fullscreen");
+          setIsFullScreen(true);
+        });
+      } else {
+        setIsFullScreen(true);
+      }
     } else {
-      if (document.exitFullscreen) {
+      if (document.exitFullscreen && document.fullscreenElement) {
         document.exitFullscreen();
       }
       setIsFullScreen(false);
@@ -109,11 +172,12 @@ export default function GameBoard() {
     );
   }
 
-  return (
+  const GameContent = (
     <div
+      ref={containerRef}
       className={`
-        bg-black rounded-lg overflow-hidden relative flex flex-col items-center justify-center transition-all duration-300
-        ${isFullScreen ? 'fixed inset-0 z-50 h-screen w-screen p-4' : 'w-full h-full min-h-[500px] p-4'}
+        bg-black relative flex flex-col items-center justify-center transition-all duration-300
+        ${isFullScreen ? 'fixed inset-0 z-[9999] w-screen h-screen p-4' : 'w-full h-full min-h-[400px] p-4 rounded-lg overflow-hidden'}
       `}
     >
       {isOffline && (
@@ -130,7 +194,7 @@ export default function GameBoard() {
           title={isFullScreen ? "Exit Full Screen" : "Enter Full Screen"}
         >
           {isFullScreen ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           ) : (
@@ -148,7 +212,7 @@ export default function GameBoard() {
 
       {/* 2D Grid Container */}
       <div
-        className="grid transition-all duration-300"
+        className="grid transition-all duration-300 content-center justify-center w-full h-full overflow-y-auto"
         style={gridStyle}
       >
         {gameState.cards.map((card) => (
@@ -162,4 +226,10 @@ export default function GameBoard() {
       </div>
     </div>
   );
+
+  if (isFullScreen && mounted) {
+    return createPortal(GameContent, document.body);
+  }
+
+  return GameContent;
 }
