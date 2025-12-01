@@ -5,18 +5,18 @@
 :root {
   --background: #050505;
   --foreground: #ededed;
-  
+
   /* Neon Colors */
   --neon-cyan: #00f3ff;
   --neon-pink: #ff00ff;
   --neon-purple: #bc13fe;
   --neon-green: #0aff00;
-  
+
   /* Dark Theme Colors */
   --surface-dark: #0a0a0a;
   --surface-light: #1a1a1a;
   --surface-glass: rgba(20, 20, 20, 0.7);
-  
+
   /* Game Specific */
   --game-border-color: var(--neon-cyan);
   --game-background: #000000;
@@ -31,7 +31,12 @@ body {
   overflow-x: hidden;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: 'Orbitron', sans-serif;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -149,4 +154,21 @@ h1, h2, h3, h4, h5, h6 {
 .game-container {
   min-height: 100vh;
   background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
+}
+
+/* 3D Card Flip Utilities */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
 }

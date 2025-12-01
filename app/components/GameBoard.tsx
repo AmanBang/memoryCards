@@ -1,184 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
-import Card3D from './Card3D';
-import DynamicCanvas from './DynamicCanvas';
+import { useState, useEffect } from 'react';
+import Card2D from './Card2D';
 import { useGame } from '../context/GameContext';
 import { calculateGrid } from '../utils/helpers';
-import * as THREE from 'three';
 import VoiceChat from './VoiceChat';
-
-// Simple Pan Controls component
-function PanControls({ maxDistance = 30, minDistance = 1 }) {
-  const { camera, gl } = useThree();
-  const domElement = gl.domElement;
-  const [isDragging, setIsDragging] = useState(false);
-  const lastPosition = useRef({ x: 0, y: 0 });
-  const targetPosition = useRef(new THREE.Vector3(0, 0, 0));
-
-  useEffect(() => {
-    const onPointerDown = (e: PointerEvent) => {
-      setIsDragging(true);
-      lastPosition.current = { x: e.clientX, y: e.clientY };
-    };
-
-    const onPointerUp = () => {
-      setIsDragging(false);
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (isDragging) {
-        const deltaX = (e.clientX - lastPosition.current.x) * 0.01;
-        const deltaY = (e.clientY - lastPosition.current.y) * 0.01;
-
-        // Move camera target (not the camera itself)
-        targetPosition.current.x -= deltaX;
-        targetPosition.current.y += deltaY;
-
-        lastPosition.current = { x: e.clientX, y: e.clientY };
-      }
-    };
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const delta = e.deltaY * 0.005;
-
-      // Adjust camera distance
-      if (camera instanceof THREE.PerspectiveCamera) {
-        let newZ = camera.position.z + delta;
-        newZ = Math.max(minDistance, Math.min(maxDistance, newZ));
-        camera.position.z = newZ;
-      }
-    };
-
-    // Touch controls for pinch zoom
-    let initialTouchDistance = 0;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        initialTouchDistance = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-      } else if (e.touches.length === 1) {
-        lastPosition.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        setIsDragging(true);
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-
-      // Handle pinch to zoom with two fingers
-      if (e.touches.length === 2) {
-        const currentDistance = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-
-        const delta = (initialTouchDistance - currentDistance) * 0.01;
-        initialTouchDistance = currentDistance;
-
-        if (camera instanceof THREE.PerspectiveCamera) {
-          let newZ = camera.position.z + delta;
-          newZ = Math.max(minDistance, Math.min(maxDistance, newZ));
-          camera.position.z = newZ;
-        }
-      }
-      // Handle drag with one finger
-      else if (e.touches.length === 1 && isDragging) {
-        const deltaX = (e.touches[0].clientX - lastPosition.current.x) * 0.01;
-        const deltaY = (e.touches[0].clientY - lastPosition.current.y) * 0.01;
-
-        targetPosition.current.x -= deltaX;
-        targetPosition.current.y += deltaY;
-
-        lastPosition.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      }
-    };
-
-    const onTouchEnd = () => {
-      setIsDragging(false);
-    };
-
-    // Add all event listeners
-    domElement.addEventListener('pointerdown', onPointerDown);
-    domElement.addEventListener('pointerup', onPointerUp);
-    domElement.addEventListener('pointermove', onPointerMove);
-    domElement.addEventListener('wheel', onWheel, { passive: false });
-
-    // Touch events
-    domElement.addEventListener('touchstart', onTouchStart, { passive: false });
-    domElement.addEventListener('touchmove', onTouchMove, { passive: false });
-    domElement.addEventListener('touchend', onTouchEnd);
-
-    return () => {
-      // Remove all event listeners
-      domElement.removeEventListener('pointerdown', onPointerDown);
-      domElement.removeEventListener('pointerup', onPointerUp);
-      domElement.removeEventListener('pointermove', onPointerMove);
-      domElement.removeEventListener('wheel', onWheel);
-
-      domElement.removeEventListener('touchstart', onTouchStart);
-      domElement.removeEventListener('touchmove', onTouchMove);
-      domElement.removeEventListener('touchend', onTouchEnd);
-    };
-  }, [domElement, isDragging, camera, maxDistance, minDistance]);
-
-  useFrame(() => {
-    if (camera instanceof THREE.PerspectiveCamera) {
-      // Smoothly transition the camera to the target position
-      camera.position.x += (targetPosition.current.x - camera.position.x) * 0.1;
-      camera.position.y += (targetPosition.current.y - camera.position.y) * 0.1;
-    }
-  });
-
-  return null;
-}
-
-// Custom Camera component
-function Camera(props: { position: [number, number, number], fov: number }) {
-  const { camera } = useThree();
-
-  useEffect(() => {
-    if (camera instanceof THREE.PerspectiveCamera) {
-      camera.position.set(...props.position);
-      camera.fov = props.fov;
-      camera.updateProjectionMatrix();
-    }
-  }, [camera, props.position, props.fov]);
-
-  return null;
-}
-
-// Grid Floor Component
-function GridFloor() {
-  return (
-    <gridHelper
-      args={[100, 100, 0x00f3ff, 0x1a1a1a]}
-      position={[0, 0, -0.5]}
-      rotation={[Math.PI / 2, 0, 0]}
-    />
-  );
-}
 
 export default function GameBoard() {
   const { gameState, flipCard, isOffline } = useGame();
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
-  const [renderKey, setRenderKey] = useState(0);
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Check if device is mobile
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [gridStyle, setGridStyle] = useState({});
 
   // Force re-render every 30 seconds to keep the timer updated
   useEffect(() => {
@@ -188,21 +20,83 @@ export default function GameBoard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Listen for fullscreen change events (e.g. user pressing Esc)
   useEffect(() => {
-    // Set up global error handler for WebGL context loss
-    const handleError = () => {
-      console.error('WebGL context error detected');
-      setRenderKey(prev => prev + 1);
+    const handleFullScreenChange = () => {
+      setIsFullScreen(!!document.fullscreenElement);
     };
 
-    if (typeof window !== 'undefined') {
-      window.addEventListener('webglcontextlost', handleError);
-
-      return () => {
-        window.removeEventListener('webglcontextlost', handleError);
-      };
-    }
+    document.addEventListener('fullscreenchange', handleFullScreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullScreenChange);
   }, []);
+
+  // Calculate grid dimensions and style
+  useEffect(() => {
+    if (!gameState) return;
+
+    const calculateLayout = () => {
+      const { rows, cols } = calculateGrid(gameState.cards.length);
+      const gap = 16; // 1rem = 16px
+      const padding = 32; // 2rem = 32px
+
+      // Available space
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      const availableWidth = isFullScreen ? vw - padding : Math.min(vw - padding, 1152); // max-w-6xl is 1152px
+      const availableHeight = isFullScreen ? vh - padding : Math.max(500, vh * 0.7); // Min 500px or 70% of screen height
+
+      // Card aspect ratio 3:4
+      const cardAspectRatio = 3 / 4;
+
+      // Calculate max card width based on available width
+      // width = (availableWidth - (cols - 1) * gap) / cols
+      const maxCardWidthFromWidth = (availableWidth - (cols - 1) * gap) / cols;
+
+      // Calculate max card width based on available height
+      // height = width / ratio
+      // height = (availableHeight - (rows - 1) * gap) / rows
+      // width = height * ratio
+      const maxCardHeightFromHeight = (availableHeight - (rows - 1) * gap) / rows;
+      const maxCardWidthFromHeight = maxCardHeightFromHeight * cardAspectRatio;
+
+      // Choose the smaller of the two to ensure it fits both dimensions
+      const cardWidth = Math.min(maxCardWidthFromWidth, maxCardWidthFromHeight);
+
+      setGridStyle({
+        gridTemplateColumns: `repeat(${cols}, ${cardWidth}px)`,
+        gap: `${gap}px`,
+        maxWidth: '100%',
+        justifyContent: 'center'
+      });
+    };
+
+    calculateLayout();
+    window.addEventListener('resize', calculateLayout);
+    return () => window.removeEventListener('resize', calculateLayout);
+  }, [gameState, isFullScreen]);
+
+  const handleCardClick = (cardId: number) => {
+    if (isOffline) {
+      console.log('Cannot flip card while offline');
+      return;
+    }
+    flipCard(cardId);
+  };
+
+  const toggleFullScreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((e) => {
+        console.error(`Error attempting to enable full-screen mode: ${e.message} (${e.name})`);
+      });
+      setIsFullScreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+      setIsFullScreen(false);
+    }
+  };
 
   if (!gameState) {
     return (
@@ -215,158 +109,57 @@ export default function GameBoard() {
     );
   }
 
-  const handleCardClick = (cardId: number) => {
-    if (isOffline) {
-      console.log('Cannot flip card while offline');
-      return;
-    }
-    flipCard(cardId);
-  };
-
-  // Calculate grid dimensions
-  const { rows, cols } = calculateGrid(gameState.cards.length);
-
-  // Make container take full available viewport height
-  const getContainerHeight = () => {
-    return 'h-full w-full min-h-[500px]';
-  };
-
-  // Dynamically adjust camera position based on screen size and card count
-  const getCameraPosition = () => {
-    const maxDimension = Math.max(rows, cols);
-    const aspectRatio = typeof window !== 'undefined' ? window.innerWidth / window.innerHeight : 1.5;
-
-    // Adjust distance based on screen aspect ratio and card count
-    let distanceScale = 0.85;
-    const cardCount = gameState.cards.length;
-
-    // Use multiplier for different aspect ratios
-    if (aspectRatio < 0.8) { // Portrait phone
-      distanceScale *= 1.3;
-    } else if (aspectRatio > 2) { // Ultra-wide
-      distanceScale *= 0.8;
-    }
-
-    // Add scaling based on card count
-    if (cardCount > 36 && cardCount <= 64) distanceScale *= 1.15;
-    if (cardCount > 64 && cardCount <= 100) distanceScale *= 1.25;
-    if (cardCount > 100) distanceScale *= 1.35;
-
-    const baseDistance = maxDimension * 0.85; // Increased from 0.65
-    const distance = baseDistance * distanceScale;
-
-    // Return adjusted camera position
-    return [0, 0, distance] as [number, number, number];
-  };
-
-  // Calculate camera FOV based on screen size and card count
-  const getCameraFOV = () => {
-    const aspectRatio = typeof window !== 'undefined' ? window.innerWidth / window.innerHeight : 1.5;
-    const cardCount = gameState.cards.length;
-
-    // Base FOV depends on aspect ratio
-    let baseFOV = 65;
-
-    // Adjust for extreme aspect ratios
-    if (aspectRatio < 0.8) baseFOV = 75; // More vertical space for portrait
-    if (aspectRatio > 2) baseFOV = 55;   // Less vertical space for ultrawide
-
-    // Adjust FOV based on card count
-    if (cardCount <= 16) return baseFOV - 5;  // Smaller FOV for few cards
-    if (cardCount <= 36) return baseFOV;      // Base FOV for medium count
-    if (cardCount <= 64) return baseFOV + 5;  // Larger FOV for more cards
-    if (cardCount <= 100) return baseFOV + 10;
-    return baseFOV + 15; // Maximum FOV for highest difficulty
-  };
-
-  // Calculate card positions to fit all cards on screen
-  const getCardPosition = (index: number): [number, number, number] => {
-    const cardWidth = 1;
-    const cardHeight = 1.2; // Slightly shorter cards
-    const aspectRatio = typeof window !== 'undefined' ? window.innerWidth / window.innerHeight : 1.5;
-
-    // Determine spacing based on screen dimensions and card count
-    let baseSpacing = 0.2;
-
-    // Adjust spacing based on aspect ratio
-    if (aspectRatio < 0.8) baseSpacing = 0.15; // Tighter spacing for portrait
-    if (aspectRatio > 2) baseSpacing = 0.25;   // More spacing for ultrawide
-
-    // Adjust spacing based on number of cards
-    let spacing = baseSpacing;
-    if (gameState.cards.length > 36) spacing *= 0.9;
-    if (gameState.cards.length > 64) spacing *= 0.85;
-    if (gameState.cards.length > 100) spacing *= 0.75;
-
-    // Calculate total dimensions
-    const totalWidth = cols * (cardWidth + spacing);
-    const totalHeight = rows * (cardHeight + spacing);
-
-    const row = Math.floor(index / cols);
-    const col = index % cols;
-
-    // Calculate positions with adjusted spacing
-    const x = col * (cardWidth + spacing) - totalWidth / 2 + cardWidth / 2;
-    const y = -row * (cardHeight + spacing) + totalHeight / 2 - cardHeight / 2;
-
-    return [x, y, 0];
-  };
-
-  const renderGameContent = () => (
-    <>
-      {/* Dark background with fog for depth */}
-      <color attach="background" args={['#050505']} />
-      <fog attach="fog" args={['#050505', 5, 40]} />
-
-      {/* Grid Floor for cyber aesthetic */}
-      <GridFloor />
-
-      {/* Lighting setup */}
-      <ambientLight intensity={0.2} />
-      <pointLight position={[10, 10, 10]} intensity={1} color="#00f3ff" />
-      <pointLight position={[-10, -10, 10]} intensity={0.5} color="#ff00ff" />
-      <spotLight position={[0, 0, 20]} angle={0.5} penumbra={1} intensity={1} castShadow />
-
-      <Camera position={getCameraPosition()} fov={getCameraFOV()} />
-
-      {/* Add OrbitControls to allow panning and zooming */}
-      <PanControls />
-
-      {gameState.cards.map((card, index) => (
-        <Card3D
-          key={`card-${card.id}`}
-          card={card}
-          position={getCardPosition(index)}
-          onClick={() => handleCardClick(card.id)}
-          difficulty={gameState.difficulty || "medium"}
-        />
-      ))}
-    </>
-  );
-
   return (
-    <div className={`${getContainerHeight()} bg-black rounded-lg overflow-hidden relative`}>
+    <div
+      className={`
+        bg-black rounded-lg overflow-hidden relative flex flex-col items-center justify-center transition-all duration-300
+        ${isFullScreen ? 'fixed inset-0 z-50 h-screen w-screen p-4' : 'w-full h-full min-h-[500px] p-4'}
+      `}
+    >
       {isOffline && (
         <div className="absolute top-2 right-2 z-10 bg-red-900/80 border border-red-500 text-red-200 px-3 py-1 rounded-full text-xs font-mono animate-pulse">
           OFFLINE MODE
         </div>
       )}
 
-      {isMobile && (
-        <div className="absolute top-2 left-2 z-10 bg-black/70 border border-[var(--neon-cyan)] text-[var(--neon-cyan)] px-3 py-2 rounded-lg text-xs max-w-[170px] backdrop-blur-sm">
-          <p className="mb-1">PINCH TO ZOOM</p>
-          <p>DRAG TO PAN</p>
-        </div>
-      )}
+      {/* Controls */}
+      <div className="absolute top-4 right-4 z-20 flex gap-2">
+        <button
+          onClick={toggleFullScreen}
+          className="bg-black/50 hover:bg-[var(--neon-cyan)] text-[var(--neon-cyan)] hover:text-black border border-[var(--neon-cyan)] p-2 rounded-full transition-all duration-300 backdrop-blur-sm"
+          title={isFullScreen ? "Exit Full Screen" : "Enter Full Screen"}
+        >
+          {isFullScreen ? (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          )}
+        </button>
+      </div>
 
       {/* Voice Chat Controls */}
-      <div className="absolute bottom-4 right-4 z-10">
+      <div className={`absolute bottom-4 right-4 z-10 ${isFullScreen ? 'opacity-50 hover:opacity-100 transition-opacity' : ''}`}>
         <VoiceChat />
       </div>
 
-      <DynamicCanvas key={renderKey} className="w-full h-full">
-        {renderGameContent()}
-      </DynamicCanvas>
+      {/* 2D Grid Container */}
+      <div
+        className="grid transition-all duration-300"
+        style={gridStyle}
+      >
+        {gameState.cards.map((card) => (
+          <Card2D
+            key={`card-${card.id}`}
+            card={card}
+            onClick={() => handleCardClick(card.id)}
+            difficulty={gameState.difficulty || "medium"}
+          />
+        ))}
+      </div>
     </div>
   );
 }
