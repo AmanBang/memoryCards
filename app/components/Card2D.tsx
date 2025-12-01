@@ -94,7 +94,7 @@ export default function Card2D({ card, onClick, difficulty }: Card2DProps) {
 
                 {/* Card Front (Back Face) */}
                 <div
-                    className="absolute w-full h-full backface-hidden rotate-y-180 rounded-xl border-2 flex items-center justify-center bg-gray-900"
+                    className="absolute w-full h-full backface-hidden rotate-y-180 rounded-xl border-2 flex items-center justify-center bg-gray-900 overflow-hidden"
                     style={{
                         borderColor: cardColor,
                         boxShadow: card.isMatched
@@ -102,7 +102,10 @@ export default function Card2D({ card, onClick, difficulty }: Card2DProps) {
                             : `0 0 10px ${cardColor}`,
                     }}
                 >
-                    <div className="text-5xl select-none filter drop-shadow-lg">
+                    <div
+                        className="select-none filter drop-shadow-lg w-full h-full flex items-center justify-center"
+                        style={{ fontSize: 'clamp(1.5rem, 50%, 4rem)' }}
+                    >
                         {getCardSymbol()}
                     </div>
 
