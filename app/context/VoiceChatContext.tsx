@@ -6,19 +6,24 @@ import { useGame } from './GameContext';
 import { database } from '../firebase/config';
 import { ref, set, onValue, off, onDisconnect } from 'firebase/database';
 
+
 interface PeerConnection {
   connection: RTCPeerConnection;
   audioTrack?: MediaStreamTrack;
+  videoTrack?: MediaStreamTrack;
 }
 
 interface VoiceChatContextType {
   isMuted: boolean;
+  isVideoEnabled: boolean;
   isConnected: boolean;
   isCallActive: boolean;
   toggleMute: () => void;
+  toggleVideo: () => void;
   startCall: () => Promise<void>;
   endCall: () => void;
   connectedUsers: string[];
+  localStream: MediaStream | null;
 }
 
 const VoiceChatContext = createContext<VoiceChatContextType | undefined>(undefined);
@@ -35,6 +40,7 @@ export function VoiceChatProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { gameId, gameState } = useGame();
   const [isMuted, setIsMuted] = useState(false);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   // Use useRef for peer connections to avoid state update race conditions
   const peerConnections = useRef<Record<string, PeerConnection>>({});
@@ -79,11 +85,18 @@ export function VoiceChatProvider({ children }: { children: ReactNode }) {
     // Create new RTCPeerConnection
     const peerConnection = new RTCPeerConnection(iceServers);
 
-    // Add local audio tracks
+    // Add local audio and video tracks
     const audioTracks = localStream.getAudioTracks();
-    console.log(`Adding ${audioTracks.length} audio tracks for peer ${peerId}`);
+    const videoTracks = localStream.getVideoTracks();
+    console.log(`Adding ${audioTracks.length} audio tracks and ${videoTracks.length} video tracks for peer ${peerId}`);
+
     audioTracks.forEach(track => {
-      console.log(`Track: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}`);
+      console.log(`Audio Track: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}`);
+      peerConnection.addTrack(track, localStream);
+    });
+
+    videoTracks.forEach(track => {
+      console.log(`Video Track: ${track.label}, enabled: ${track.enabled}`);
       peerConnection.addTrack(track, localStream);
     });
 
@@ -104,8 +117,8 @@ export function VoiceChatProvider({ children }: { children: ReactNode }) {
         });
       } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
         setConnectedUsers(prev => prev.filter(id => id !== peerId));
-        const audioElement = document.getElementById(`remote-audio-${peerId}`);
-        if (audioElement) audioElement.remove();
+        const videoElement = document.getElementById(`remote-video-${peerId}`);
+        if (videoElement) videoElement.remove();
       }
     };
 
@@ -131,34 +144,39 @@ export function VoiceChatProvider({ children }: { children: ReactNode }) {
         streams: event.streams?.length || 0
       });
 
-      // Create audio element for remote audio if it doesn't exist
-      let audioElement = document.getElementById(`remote-audio-${peerId}`) as HTMLAudioElement;
-      if (!audioElement) {
-        console.log(`Creating new audio element for ${peerId}`);
-        audioElement = document.createElement('audio');
-        audioElement.id = `remote-audio-${peerId}`;
-        audioElement.autoplay = true;
-        audioElement.volume = 1.0; // Set volume to maximum
-        // @ts-ignore - playsInline is standard but might be missing in TS types for Audio
-        audioElement.playsInline = true;
-        document.body.appendChild(audioElement);
+      // Create video element for remote stream if it doesn't exist
+      let videoElement = document.getElementById(`remote-video-${peerId}`) as HTMLVideoElement;
+      if (!videoElement) {
+        console.log(`Creating new video element for ${peerId}`);
+        videoElement = document.createElement('video');
+        videoElement.id = `remote-video-${peerId}`;
+        videoElement.autoplay = true;
+        videoElement.playsInline = true;
+        videoElement.muted = false; // We want to hear the audio from the video element
+        videoElement.style.display = 'none'; // Hidden by default, VideoGrid will show it
+        document.body.appendChild(videoElement);
       }
 
       if (event.streams && event.streams[0]) {
         console.log(`Setting srcObject from event.streams[0] for ${peerId}`);
-        audioElement.srcObject = event.streams[0];
+        videoElement.srcObject = event.streams[0];
       } else {
         // Fallback if no stream is provided with the track
         console.log(`Creating new MediaStream for track from ${peerId}`);
-        const inboundStream = new MediaStream();
-        inboundStream.addTrack(event.track);
-        audioElement.srcObject = inboundStream;
+        const existingStream = videoElement.srcObject as MediaStream;
+        if (existingStream) {
+          existingStream.addTrack(event.track);
+        } else {
+          const inboundStream = new MediaStream();
+          inboundStream.addTrack(event.track);
+          videoElement.srcObject = inboundStream;
+        }
       }
 
       // Attempt to play (browser might block if no interaction)
-      audioElement.play()
-        .then(() => console.log(`✅ Audio playing for ${peerId}`))
-        .catch(e => console.error(`❌ Error playing audio for ${peerId}:`, e));
+      videoElement.play()
+        .then(() => console.log(`✅ Video playing for ${peerId}`))
+        .catch(e => console.error(`❌ Error playing video for ${peerId}:`, e));
     };
 
     // Store the connection immediately in ref
@@ -329,8 +347,8 @@ export function VoiceChatProvider({ children }: { children: ReactNode }) {
         pc.close();
         delete peerConnections.current[peerId];
 
-        const audioElement = document.getElementById(`remote-audio-${peerId}`);
-        if (audioElement) audioElement.remove();
+        const videoElement = document.getElementById(`remote-video-${peerId}`);
+        if (videoElement) videoElement.remove();
 
         setConnectedUsers(prev => prev.filter(id => id !== peerId));
       }
@@ -348,16 +366,37 @@ export function VoiceChatProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Toggle video state
+  const toggleVideo = () => {
+    if (localStream) {
+      localStream.getVideoTracks().forEach(track => {
+        track.enabled = !isVideoEnabled;
+      });
+      setIsVideoEnabled(!isVideoEnabled);
+    }
+  };
+
   // Start a call
   const startCall = async () => {
     try {
-      console.log('🎤 Requesting microphone access...');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      console.log('🎤📹 Requesting microphone and camera access...');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: 'user'
+        }
+      });
 
       const audioTracks = stream.getAudioTracks();
-      console.log(`✅ Got microphone access. Audio tracks: ${audioTracks.length}`);
+      const videoTracks = stream.getVideoTracks();
+      console.log(`✅ Got media access. Audio tracks: ${audioTracks.length}, Video tracks: ${videoTracks.length}`);
       audioTracks.forEach((track, i) => {
-        console.log(`  Track ${i}: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}`);
+        console.log(`  Audio Track ${i}: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}`);
+      });
+      videoTracks.forEach((track, i) => {
+        console.log(`  Video Track ${i}: ${track.label}, enabled: ${track.enabled}`);
       });
 
       setLocalStream(stream);
@@ -391,8 +430,8 @@ export function VoiceChatProvider({ children }: { children: ReactNode }) {
 
     Object.entries(peerConnections.current).forEach(([peerId, { connection }]) => {
       connection.close();
-      const audioElement = document.getElementById(`remote-audio-${peerId}`);
-      if (audioElement) audioElement.remove();
+      const videoElement = document.getElementById(`remote-video-${peerId}`);
+      if (videoElement) videoElement.remove();
     });
 
     peerConnections.current = {};
@@ -415,12 +454,15 @@ export function VoiceChatProvider({ children }: { children: ReactNode }) {
     <VoiceChatContext.Provider
       value={{
         isMuted,
+        isVideoEnabled,
         isConnected,
         isCallActive,
         toggleMute,
+        toggleVideo,
         startCall,
         endCall,
-        connectedUsers
+        connectedUsers,
+        localStream
       }}
     >
       {children}

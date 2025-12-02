@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useVoiceChat } from '../context/VoiceChatContext';
 import { useGame } from '../context/GameContext';
+import VideoGrid from './VideoGrid';
 
 export default function VoiceChat() {
-  const { isMuted, isConnected, isCallActive, toggleMute, startCall, endCall, connectedUsers } = useVoiceChat();
+  const { isMuted, isVideoEnabled, isConnected, isCallActive, toggleMute, toggleVideo, startCall, endCall, connectedUsers } = useVoiceChat();
   const { gameState } = useGame();
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [showConnectedUsers, setShowConnectedUsers] = useState(false);
@@ -13,7 +14,7 @@ export default function VoiceChat() {
   // Get display names of connected users
   const getConnectedUserNames = () => {
     if (!gameState) return [];
-    
+
     return connectedUsers.map(userId => {
       const player = gameState.players[userId];
       return player?.displayName || 'Unknown Player';
@@ -28,6 +29,9 @@ export default function VoiceChat() {
       console.error('Error starting call:', error);
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
         setPermissionDenied(true);
+      } else if (error.name === 'NotFoundError') {
+        // Camera or microphone not found
+        alert('Camera or microphone not found. Please connect a device and try again.');
       }
     }
   };
@@ -42,14 +46,12 @@ export default function VoiceChat() {
           title="Start voice chat"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M10 2a2 2 0 00-2 2v6a2 2 0 104 0V4a2 2 0 00-2-2z" />
-            <path d="M14 9.5a4 4 0 11-8 0 4 4 0 018 0z" fillRule="evenodd" clipRule="evenodd" />
-            <path d="M6 12a4 4 0 014 4v1a2 2 0 002 2h.5a.5.5 0 00.5-.5V18a5 5 0 00-5-5H7a5 5 0 00-5 5v.5a.5.5 0 00.5.5H3a2 2 0 002-2v-1a4 4 0 014-4h1z" />
+            <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zm12.553 1.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
           </svg>
-          <span>Join Call</span>
+          <span>Join Video Call</span>
         </button>
       )}
-      
+
       {/* Call active state - show controls */}
       {isCallActive && (
         <div className="flex items-center space-x-2">
@@ -70,9 +72,26 @@ export default function VoiceChat() {
               </svg>
             )}
           </button>
-          
+
+          {/* Camera toggle button */}
+          <button
+            onClick={toggleVideo}
+            className={`p-2 rounded-full ${!isVideoEnabled ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white`}
+            title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
+          >
+            {!isVideoEnabled ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A2 2 0 0018 13.657V6.343a1 1 0 00-1.447-.894l-2 1A2 2 0 0012 6V4a2 2 0 00-2-2H6.414l-2.707-2.707zm5.586 5.586L12 10.586V6H9.293zM2 6a2 2 0 012-2h.879L2 1.121V6z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zm12.553 1.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+              </svg>
+            )}
+          </button>
+
           {/* Connection status indicator */}
-          <div 
+          <div
             className="relative cursor-pointer"
             onClick={() => setShowConnectedUsers(!showConnectedUsers)}
             title="Connected users"
@@ -82,7 +101,7 @@ export default function VoiceChat() {
                 <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zm5 2a2 2 0 11-4 0 2 2 0 014 0zm-4 7a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zm10 10v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
               </svg>
             </div>
-            
+
             {/* Show connected users in a dropdown */}
             {showConnectedUsers && connectedUsers.length > 0 && (
               <div className="absolute bottom-full mb-2 right-0 bg-white shadow-lg rounded-md p-2 min-w-[150px] z-10">
@@ -95,7 +114,7 @@ export default function VoiceChat() {
               </div>
             )}
           </div>
-          
+
           {/* End call button */}
           <button
             onClick={endCall}
@@ -110,13 +129,16 @@ export default function VoiceChat() {
           </button>
         </div>
       )}
-      
+
       {/* Show permission denied message */}
       {permissionDenied && (
         <div className="mt-2 text-red-500 text-xs">
-          Microphone access denied. Please check your browser permissions.
+          Camera or microphone access denied. Please check your browser permissions.
         </div>
       )}
+
+      {/* Video Grid */}
+      {isCallActive && <VideoGrid />}
     </div>
   );
 } 
