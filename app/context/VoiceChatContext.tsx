@@ -265,7 +265,6 @@ export function VoiceChatProvider({ children }: { children: ReactNode }) {
     if (!gameId || !user || !isCallActive) return;
 
     const signalingRef = ref(database, `voiceChat/${gameId}/signaling/${user.uid}`);
-
     const unsubscribe = onValue(signalingRef, async (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
